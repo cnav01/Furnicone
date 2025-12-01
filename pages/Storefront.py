@@ -21,7 +21,8 @@ else:
             with st.container(border=True):
                 # Image
                 if "image_obj" in item:
-                    st.image(item["image_obj"], use_column_width=True)
+                    # FIX: Updated deprecated 'use_column_width' to 'use_container_width'
+                    st.image(item["image_obj"], use_container_width=True)
                 
                 # Title & Price
                 # Use .get() to prevent errors if keys are missing
