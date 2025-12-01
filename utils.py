@@ -86,17 +86,25 @@ def analyze_image_mock(image):
         except Exception as e:
             # If error is 429 (Quota) or 404 (Not Found), just continue to next model
             error_str = str(e)
+            last_error = error_str # Capture the error
             if "429" in error_str or "404" in error_str or "not found" in error_str.lower():
-                last_error = e
                 continue # TRY NEXT MODEL IMMEDIATELY
             else:
                 # Real error (like Auth), stop trying
                 st.error(f"Critical Error on {model_name}: {e}")
                 return {"detected_type": "Error", "description": str(e), "suggested_tags": []}
 
-    # If we run out of models
-    st.error(f"All AI Models failed. Last error: {last_error}")
-    return {"detected_type": "Error", "description": "System Busy", "suggested_tags": []}
+    # If we run out of models, show the actual error instead of "System Busy"
+    error_short = str(last_error)[:100] if last_error else "Unknown Error"
+    st.error(f"All AI Models failed. Details: {last_error}")
+    
+    return {
+        "detected_type": "Analysis Failed", 
+        "description": f"AI Error: {error_short}. Please check API Quota.", 
+        "suggested_tags": [],
+        "primary_material": "Unknown",
+        "color": "Unknown"
+    }
 
 # --- 2. IMAGEN 3 (The Artist) ---
 def generate_product_variations(original_image):
@@ -134,8 +142,8 @@ def generate_product_variations(original_image):
                 raise e
 
     except Exception as e:
-        # If generation fails, quietly return original image so app doesn't crash
-        # st.warning(f"Image Gen Skipped: {e}") 
+        # We now SHOW the error so you know why only 1 image appeared
+        st.warning(f"Image Generation Skipped: {e}") 
         return [original_image]
 
 # --- 3. DATABASE ---
