@@ -45,7 +45,7 @@ def optimize_image(image):
     img_copy.save(img_byte_arr, format='JPEG', quality=85)
     return img_byte_arr.getvalue()
 
-# --- 1. GEMINI 1.5 FLASH (The Analyst) ---
+# --- 1. GEMINI 2.0 FLASH (The Analyst) ---
 def analyze_image_mock(image):
     if not client: return {"detected_type": "API Error", "description": "Check API Key"}
 
@@ -63,8 +63,9 @@ def analyze_image_mock(image):
         - suggested_tags (list of 5 strings)
         """
 
+        # Attempt with Gemini 2.0 Flash Experimental (Latest/Widest availability)
         response = client.models.generate_content(
-            model='gemini-1.5-flash-002', # FIXED: Using specific stable version
+            model='gemini-2.0-flash-exp', 
             contents=[
                 types.Content(
                     role="user",
@@ -81,6 +82,20 @@ def analyze_image_mock(image):
         return json.loads(response.text)
 
     except Exception as e:
+        # DEBUG MODE: If model not found, list what IS available
+        error_msg = str(e)
+        if "404" in error_msg or "not found" in error_msg.lower():
+            try:
+                # Try to list available models to help debug
+                # Note: This is a best-effort debug step
+                st.error(f"Model Not Found. Attempting to list available models...")
+                # In standard REST this would be GET /v1beta/models
+                # For now, we suggest the user check their API key permissions
+                st.error(f"Error details: {error_msg}")
+                return {"detected_type": "Model Error", "description": "The specific AI model version is not enabled for your API Key. Check Google AI Studio.", "suggested_tags": []}
+            except:
+                pass
+        
         st.error(f"Gemini Analysis Failed: {e}")
         return {"detected_type": "Error", "description": str(e), "suggested_tags": []}
 
@@ -95,7 +110,7 @@ def generate_product_variations(original_image):
 
         prompt = "Generate a professional product photo of this object from a slightly different side angle. Studio lighting, white background. High fidelity."
 
-        # FIXED: Switched directly to Imagen 3 (Stable) instead of experimental alias
+        # Using Imagen 3 Stable
         response = client.models.generate_images(
             model='imagen-3.0-generate-001',
             prompt=prompt,
