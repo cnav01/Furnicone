@@ -34,7 +34,7 @@ def optimize_image(image):
     img_copy.save(img_byte_arr, format='JPEG', quality=80)
     return img_byte_arr.getvalue()
 
-# --- 1. TEXT ANALYST (Gemini 2.5/1.5) ---
+# --- 1. TEXT ANALYST (Gemini 1.5 Flash) ---
 def analyze_image_mock(image):
     if not client: return {"detected_type": "Config Error", "description": "API Client not initialized.", "suggested_tags": []}
 
@@ -51,7 +51,7 @@ def analyze_image_mock(image):
     """
 
     # Model Priority List - text models are usually stable
-    models = ["gemini-1.5-flash", "gemini-2.5-flash", "gemini-1.5-flash-002"]
+    models = ["gemini-1.5-flash", "gemini-1.5-flash-002", "gemini-2.0-flash-exp"]
 
     for model in models:
         try:
@@ -78,37 +78,35 @@ def analyze_image_mock(image):
         "suggested_tags": []
     }
 
-# --- 2. IMAGE GENERATION (Pollinations.ai - FREE) ---
+# --- 2. IMAGE GENERATION (Pollinations.ai - TURBO MODE) ---
 def generate_product_variations(original_image, product_description="High end furniture product"):
     """
-    Uses Pollinations.ai (Stable Diffusion) to generate images for free.
-    Does not require an API Key.
+    Uses Pollinations.ai with 'turbo' model for speed and reliability.
     """
     generated_images = []
     
-    # Clean the prompt for the URL
+    # 1. Clean Prompt
     base_prompt = f"professional product photography of {product_description}, cinematic lighting, 8k, photorealistic, white background"
-    # Basic URL encoding
     encoded_prompt = base_prompt.replace(" ", "%20").replace(",", "%2C")
     
-    st.toast(f"🎨 Generating 3 variations using Free AI...")
+    st.toast(f"🎨 Furnicon is generating 3 variations...")
 
     try:
-        # Generate 3 variations by changing the 'seed'
+        # 2. Loop for 3 Variations
         for i in range(3):
-            # Pollinations URL format: https://image.pollinations.ai/prompt/{prompt}?seed={seed}
-            # We add 'nologo=true' to remove watermarks
-            url = f"https://image.pollinations.ai/prompt/{encoded_prompt}?seed={i+42}&width=1024&height=1024&nologo=true&model=flux"
+            # 3. URL Construction 
+            # We use model=turbo (Fastest) and nologo=true (No watermark)
+            url = f"https://image.pollinations.ai/prompt/{encoded_prompt}?width=800&height=800&model=turbo&seed={i+55}&nologo=true"
             
-            # Download the image
-            response = requests.get(url, timeout=15)
+            # 4. Request with LONG Timeout (30s) to prevent 'No Image' error
+            response = requests.get(url, timeout=30)
             
             if response.status_code == 200:
                 img_bytes = BytesIO(response.content)
                 img = Image.open(img_bytes)
                 generated_images.append(img)
             else:
-                print(f"Pollinations Error: {response.status_code}")
+                print(f"Pollinations Error {response.status_code}")
         
         if generated_images:
             return generated_images
@@ -116,7 +114,7 @@ def generate_product_variations(original_image, product_description="High end fu
     except Exception as e:
         st.error(f"Generation Failed: {e}")
 
-    # Fallback: Return original if internet fails
+    # Fallback: Return original if internet fails completely
     return [original_image]
 
 # --- 3. DATABASE ---
