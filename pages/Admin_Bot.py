@@ -4,12 +4,12 @@ from PIL import Image
 
 st.set_page_config(page_title="Admin Bot", page_icon="🍌")
 
-st.title("Furnicon Chat")
+st.title("🍌 Nano Banana Chat")
 
 # --- CHAT HISTORY & STATE ---
 if "messages" not in st.session_state:
     st.session_state.messages = [
-        {"role": "assistant", "content": "👋 Hi! I'm Furnicon  Upload a product image to start."}
+        {"role": "assistant", "content": "👋 Hi! I'm Nano Banana. Upload a product image to start."}
     ]
 if "bot_status" not in st.session_state:
     st.session_state.bot_status = "awaiting_upload" 
@@ -38,27 +38,29 @@ if st.session_state.bot_status == "awaiting_upload":
     if uploaded_file:
         image = Image.open(uploaded_file)
         
-        # User Message
         st.session_state.messages.append({
             "role": "user", "content": "Here is the product.", "image_data": image
         })
         
-        # Bot Analysis
         with st.chat_message("assistant"):
             # A. Vision Analysis
-            with st.spinner("Gemini 2.5 Flash is analyzing details..."):
+            with st.spinner("Gemini is extracting details..."):
                 ai_data = utils.analyze_image_mock(image)
                 st.session_state.draft_data = ai_data
                 st.session_state.draft_data["image_obj"] = image
             
-            # B. Nano Banana Generation
-            with st.spinner("Nano Banana is generating 3 angle variations..."):
-                variations = utils.generate_product_variations(image)
+            # B. Image Generation (Using Pollinations)
+            # We construct a prompt using the data Gemini just found
+            # e.g. "Teal Velvet Lounge Chair"
+            desc_for_gen = f"{ai_data.get('color', '')} {ai_data.get('primary_material', '')} {ai_data.get('detected_type', 'furniture')}"
+            
+            with st.spinner("Generating variations (Free Engine)..."):
+                variations = utils.generate_product_variations(image, product_description=desc_for_gen)
                 st.session_state.draft_data["variations"] = variations
             
             # Response
             desc = ai_data.get('description', 'No description')
-            response_text = f"✅ Analysis Complete.\n\n**Type:** {ai_data.get('detected_type')}\n**Material:** {ai_data.get('primary_material')}\n\n**Description:** {desc}\n\nI have generated {len(variations)} variations below. Please confirm dimensions."
+            response_text = f"✅ Analysis Complete.\n\n**Type:** {ai_data.get('detected_type')}\n**Material:** {ai_data.get('primary_material')}\n\n**Description:** {desc}\n\nI have generated {len(variations)} variations below using the Free Engine."
             st.write(response_text)
             
             # Show variations immediately
@@ -89,14 +91,13 @@ if st.session_state.bot_status == "awaiting_dims":
             d = c3.number_input("D (cm)", min_value=1)
             
             if st.form_submit_button("Publish 🚀"):
-                # Save Data
                 st.session_state.draft_data["title"] = title
                 st.session_state.draft_data["price"] = price
                 st.session_state.draft_data["dimensions_str"] = f"{h}x{w}x{d} cm"
                 
                 utils.save_product_to_store(st.session_state.draft_data)
                 
-                msg = "🎉 Product is LIVE on the Storefront with generated variations."
+                msg = "🎉 Product is LIVE on the Storefront."
                 st.session_state.messages.append({"role": "assistant", "content": msg})
                 st.session_state.bot_status = "done"
                 st.rerun()
