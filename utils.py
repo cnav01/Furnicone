@@ -34,7 +34,7 @@ def optimize_image(image):
     img_copy.save(img_byte_arr, format='JPEG', quality=80)
     return img_byte_arr.getvalue()
 
-# --- 1. TEXT ANALYST (Gemini 1.5 Flash) ---
+# --- 1. TEXT ANALYST (STRICTLY GEMINI 2.5 FLASH) ---
 def analyze_image_mock(image):
     if not client: return {"detected_type": "Config Error", "description": "API Client not initialized.", "suggested_tags": []}
 
@@ -50,8 +50,8 @@ def analyze_image_mock(image):
     - suggested_tags (list of 5 strings)
     """
 
-    # Model Priority List - text models are usually stable
-    models = ["gemini-1.5-flash", "gemini-1.5-flash-002", "gemini-2.0-flash-exp"]
+    # STRICT PRIORITY: Gemini 2.5 Flash is FIRST
+    models = ["gemini-2.5-flash", "gemini-1.5-flash-002", "gemini-1.5-flash"]
 
     for model in models:
         try:
@@ -78,43 +78,44 @@ def analyze_image_mock(image):
         "suggested_tags": []
     }
 
-# --- 2. IMAGE GENERATION (Pollinations.ai - TURBO MODE) ---
+# --- 2. IMAGE GENERATION (Pollinations - 60s TIMEOUT) ---
 def generate_product_variations(original_image, product_description="High end furniture product"):
     """
-    Uses Pollinations.ai with 'turbo' model for speed and reliability.
+    Uses Pollinations.ai (Flux Model).
+    Increased timeout to 60s to prevent crashes on slow generations.
     """
     generated_images = []
     
-    # 1. Clean Prompt
+    # Clean the prompt for the URL
     base_prompt = f"professional product photography of {product_description}, cinematic lighting, 8k, photorealistic, white background"
     encoded_prompt = base_prompt.replace(" ", "%20").replace(",", "%2C")
     
-    st.toast(f"🎨 Furnicon is generating 3 variations...")
+    st.toast(f"🎨 Furnicon is generating 3 variations (Wait ~45s)...")
 
     try:
-        # 2. Loop for 3 Variations
+        # Generate 3 variations
         for i in range(3):
-            # 3. URL Construction 
-            # We use model=turbo (Fastest) and nologo=true (No watermark)
-            url = f"https://image.pollinations.ai/prompt/{encoded_prompt}?width=800&height=800&model=turbo&seed={i+55}&nologo=true"
+            # Using 'flux' model which is high quality but slow. 
+            # Added nologo=true to remove watermarks.
+            url = f"https://image.pollinations.ai/prompt/{encoded_prompt}?width=1024&height=1024&model=flux&seed={i+100}&nologo=true"
             
-            # 4. Request with LONG Timeout (30s) to prevent 'No Image' error
-            response = requests.get(url, timeout=30)
+            # FIXED: Increased timeout from 30s to 60s
+            response = requests.get(url, timeout=60)
             
             if response.status_code == 200:
                 img_bytes = BytesIO(response.content)
                 img = Image.open(img_bytes)
                 generated_images.append(img)
             else:
-                print(f"Pollinations Error {response.status_code}")
+                print(f"Pollinations Error: {response.status_code}")
         
         if generated_images:
             return generated_images
             
     except Exception as e:
-        st.error(f"Generation Failed: {e}")
+        st.error(f"Generation Timeout/Error: {e}")
 
-    # Fallback: Return original if internet fails completely
+    # Fallback: Return original if it still fails
     return [original_image]
 
 # --- 3. DATABASE ---
