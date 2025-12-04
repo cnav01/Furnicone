@@ -27,7 +27,13 @@ except Exception as e:
     st.error(f"Client Error: {e}")
     client = None
 
-# --- HELPER ---
+# --- HELPER: ERROR LOGGER ---
+def log_error(context, error):
+    error_msg = f"❌ **Error in {context}:**\n\n{str(error)}"
+    st.session_state["global_error"] = error_msg
+    # print(f"[{context}] {error}")
+
+# --- HELPER: OPTIMIZE IMAGE ---
 def optimize_image(image):
     img_copy = image.copy()
     img_copy.thumbnail((1024, 1024))
@@ -37,20 +43,13 @@ def optimize_image(image):
     img_copy.save(img_byte_arr, format='JPEG', quality=85)
     return img_byte_arr.getvalue()
 
-# --- ERROR LOGGER ---
-def log_error(context, error):
-    error_msg = f"❌ **Error in {context}:**\n\n{str(error)}"
-    st.session_state["global_error"] = error_msg
-    print(f"[{context}] {error}")
-
-# --- 1. AMAZON ANALYST (Reliable Flat JSON) ---
+# --- 1. TEXT ANALYST (Gemini 2.5 Flash) ---
 def analyze_image_mock(image):
     if not client: return {}
 
     try:
         image_bytes = optimize_image(image)
         
-        # RESTORED: The specific, flat prompt that worked
         prompt = """
         Analyze this product image for an Amazon listing.
         Return a pure JSON object with these EXACT keys:
@@ -71,7 +70,7 @@ def analyze_image_mock(image):
         """
 
         response = client.models.generate_content(
-            model='gemini-2.5-flash', # Robust Text Model
+            model='gemini-2.5-flash',
             contents=[
                 types.Content(
                     role="user",
@@ -88,42 +87,46 @@ def analyze_image_mock(image):
         return json.loads(response.text)
 
     except Exception as e:
-        log_error("Text Analysis", e)
+        log_error("Gemini 2.5 Text Analysis", e)
         return {}
 
 # --- 2. IMAGE GENERATION (Gemini 2.5 Flash Image) ---
-def generate_product_variations(original_image, description=""):
-    """
-    Uses gemini-2.5-flash-image with the Dictionary Config Fix to prevent crashes.
-    """
+def generate_product_variations(original_image, user_instructions=None):
     if not client: return [original_image]
 
     image_bytes = optimize_image(original_image)
     generated_images = []
     
-    # 3 Angles
-    prompts = [
-        "Generate a photorealistic product image of this object viewed from the left side. White background.",
-        "Generate a photorealistic product image of this object viewed from the right side. White background.",
-        "Generate a close-up detail shot of the material texture."
-    ]
+    # 1. Determine Prompts
+    if user_instructions and len(user_instructions) > 0:
+        prompts = user_instructions
+    else:
+        prompts = [
+            "View from the left side profile",
+            "View from the right side profile",
+            "Close up texture detail"
+        ]
 
-    st.toast("🎨 Generating Angles (Gemini 2.5)...")
+    st.toast(f"🎨 Generating {len(prompts)} Variations (Gemini 2.5 Image)...")
+    
+    # STRICTLY USING GEMINI 2.5 FLASH IMAGE
     target_model = 'gemini-2.5-flash-image'
 
-    for i, p in enumerate(prompts):
-        success = False
+    for i, user_prompt in enumerate(prompts):
         
-        # --- ATTEMPT 1: Image-to-Image ---
+        full_prompt = f"Generate a photorealistic product image of THIS exact object. {user_prompt}. White background. Maintain same colors and materials. High Fidelity."
+        
         try:
-            # Using Pure Dict config to bypass SDK type errors
+            # We attempt to send the image + text. 
+            # If 2.5-flash-image supports I2I on your tier, this works best.
+            # If it fails (400), we catch it and try text-only in the next block.
             response = client.models.generate_content(
                 model=target_model,
                 contents=[
                     types.Content(
                         role="user",
                         parts=[
-                            types.Part.from_text(text=p),
+                            types.Part.from_text(text=full_prompt),
                             types.Part.from_bytes(data=image_bytes, mime_type="image/jpeg")
                         ]
                     )
@@ -131,34 +134,30 @@ def generate_product_variations(original_image, description=""):
                 config={ "response_modalities": ["IMAGE"] }
             )
             
+            # --- PARSING LOGIC FOR GEMINI 2.5 ---
+            # Gemini returns images in parts[].inline_data, NOT .generated_images
             if hasattr(response, 'parts'):
                 for part in response.parts:
                     if part.inline_data:
-                        img_bytes = part.inline_data.data
-                        if isinstance(img_bytes, str):
-                            img_bytes = base64.b64decode(img_bytes)
+                        img_data = part.inline_data.data
+                        # Decode if it comes as a base64 string
+                        if isinstance(img_data, str):
+                            img_data = base64.b64decode(img_data)
                         
-                        img = Image.open(BytesIO(img_bytes))
+                        img = Image.open(BytesIO(img_data))
                         generated_images.append(img)
-                        success = True
 
         except Exception as e:
-            # Silent fail for I2I, allow fallback
-            pass
-
-        # --- ATTEMPT 2: Text-to-Image Fallback ---
-        if not success:
+            # If I2I fails, try Text-to-Image fallback with same model
+            # This handles cases where the model rejects the input image bytes
             try:
-                # Add description to prompt for context
-                text_prompt = f"{p} Object details: {description}. High fidelity, 4k."
-                
                 response = client.models.generate_content(
                     model=target_model,
                     contents=[
                         types.Content(
                             role="user",
                             parts=[
-                                types.Part.from_text(text=text_prompt)
+                                types.Part.from_text(text=full_prompt)
                             ]
                         )
                     ],
@@ -168,18 +167,15 @@ def generate_product_variations(original_image, description=""):
                 if hasattr(response, 'parts'):
                     for part in response.parts:
                         if part.inline_data:
-                            img_bytes = part.inline_data.data
-                            if isinstance(img_bytes, str):
-                                img_bytes = base64.b64decode(img_bytes)
-                            
-                            img = Image.open(BytesIO(img_bytes))
+                            img_data = part.inline_data.data
+                            if isinstance(img_data, str):
+                                img_data = base64.b64decode(img_data)
+                            img = Image.open(BytesIO(img_data))
                             generated_images.append(img)
-                            success = True
-            
-            except Exception as e:
-                log_error(f"Strategy B (T2I) Angle {i+1}", e)
+            except Exception as e2:
+                log_error(f"Gen Angle '{user_prompt}'", e2)
 
-        time.sleep(1)
+        time.sleep(2) # Pause for rate limits
 
     if not generated_images:
         st.warning("⚠️ Generation Failed. Returning original.")
