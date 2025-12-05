@@ -29,7 +29,7 @@ for msg in st.session_state.messages:
         st.write(msg["content"])
         if msg.get("image_data"): st.image(msg["image_data"], width=250)
         if msg.get("variations"):
-            cols = st.columns(3)
+            cols = st.columns(len(msg["variations"]))
             for i, var_img in enumerate(msg["variations"]):
                 with cols[i]: st.image(var_img, use_container_width=True)
 
