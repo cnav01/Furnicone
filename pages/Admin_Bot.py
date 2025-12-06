@@ -420,7 +420,7 @@ if st.session_state.bot_status == "awaiting_instructions":
                 st.session_state.draft_data["variations"] = variations
             
             st.write("**Results:**")
-            cols = st.columns(3)
+            cols = st.columns(len(variations))
             for i, var_img in enumerate(variations):
                 with cols[i]: st.image(var_img, use_container_width=True)
             
