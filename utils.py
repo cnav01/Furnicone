@@ -196,8 +196,8 @@ def init_db():
 
 def save_product_to_store(product_data):
     """
-    1. Uploads images to Cloudinary.
-    2. Saves Metadata + URLs to JSON.
+    1. Uploads Main Image + All Variations to Cloudinary.
+    2. Saves to JSON.
     """
     if "db_products" not in st.session_state:
         init_db()
@@ -206,36 +206,43 @@ def save_product_to_store(product_data):
     new_id = int(time.time())
     product_data["id"] = new_id
     
-    # 2. UPLOAD MAIN IMAGE
-    # We prioritize the AI-generated variations if available, otherwise original
-    main_pil = product_data.get("image_obj")
+    # 2. UPLOAD MAIN IMAGE (Priority: Variation 0, else Original)
+    main_pil = None
+    if product_data.get("variations"):
+        main_pil = product_data["variations"][0]
+    else:
+        main_pil = product_data.get("image_obj")
     
     if main_pil:
-        st.toast("☁️ Uploading Main Image to Cloudinary...")
+        st.toast("☁️ Uploading Main Image...")
         main_url = upload_to_cloudinary(main_pil)
         if main_url:
-            product_data["image_path"] = main_url # This is now a generic HTTP URL!
+            product_data["image_path"] = main_url
             st.toast("✅ Main Image Uploaded!")
+        else:
+            product_data["image_path"] = ""
     
-    # 3. UPLOAD VARIATIONS (Optional but good for completeness)
-    # We store these URLs in a list if you ever want to push multiple images to Shopify
+    # 3. UPLOAD REMAINING VARIATIONS (New Active Code)
     variation_urls = []
-    if product_data.get("variations"):
-        for i, var_img in enumerate(product_data["variations"]):
+    # Check if we have more than 1 variation
+    if product_data.get("variations") and len(product_data["variations"]) > 1:
+        st.toast(f"☁️ Uploading {len(product_data['variations'])-1} extra angles...")
+        
+        # Loop through variations starting from index 1 (skip 0)
+        for i, var_img in enumerate(product_data["variations"][1:]):
             url = upload_to_cloudinary(var_img)
-            if url: variation_urls.append(url)
+            if url: 
+                variation_urls.append(url)
+                
     product_data["variation_urls"] = variation_urls
 
-    # 4. PREPARE FOR STORAGE
-    # Remove PIL objects (cannot be saved to JSON)
+    # 4. SAVE TO DB
     json_safe_data = product_data.copy()
     if "image_obj" in json_safe_data: del json_safe_data["image_obj"]
     if "variations" in json_safe_data: del json_safe_data["variations"]
     
-    # 5. SAVE
     st.session_state.db_products.append(json_safe_data)
     
-    # Update local JSON file (Snapshot)
     try:
         with open(DB_FILE, "w") as f:
             json.dump(st.session_state.db_products, f, indent=4)
