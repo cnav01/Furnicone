@@ -387,7 +387,7 @@ if st.session_state.bot_status == "awaiting_upload":
                 st.session_state.draft_data = ai_data
                 st.session_state.draft_data["image_obj"] = image
             
-            response_text = f"✅ I've analyzed the **{ai_data.get('category', 'item')}**.\n\nType instructions for variations or **'Default'**."
+            response_text = f"✅ I've analyzed the **{ai_data.get('category', 'item')}**.\n\nType instructions for variations(Front view, Rear view, Left view, Right view, Top down view, isometric view, Close up texture detail) or **'Default'**."
             st.write(response_text)
             st.session_state.messages.append({"role": "assistant", "content": response_text})
             st.session_state.bot_status = "awaiting_instructions"
