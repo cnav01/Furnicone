@@ -272,7 +272,7 @@ with st.sidebar:
     st.metric("Total Items", len(products))
     
     if products:
-        # OFFICIAL SHOPIFY CSV HEADERS
+        # OFFICIAL SHOPIFY HEADERS
         template_headers = [
             "Handle", "Title", "Body (HTML)", "Vendor", "Product Category", "Type", "Tags", 
             "Published", "Option1 Name", "Option1 Value", "Option2 Name", "Option2 Value", 
@@ -296,18 +296,14 @@ with st.sidebar:
             clean_title = p.get("title", "product").replace(" ", "-").lower()
             handle = f"{clean_title}-{p.get('id', 0)}"
             
-            # --- CRITICAL FIX: USE SAVED URL DIRECTLY ---
-            # utils.py saved the Cloudinary URL into "image_path". We use it directly.
-            image_url = p.get("image_path", "")
-
+            # --- 1. MASTER ROW (Main Product + Image 1) ---
             row = {
                 "Handle": handle,
                 "Title": p.get("title", "Untitled"),
                 "Body (HTML)": p.get("description", ""),
                 "Vendor": p.get("brand_generic", "Furnicon"),
-                "Product Category": "",
                 "Type": p.get("category", "Furniture"),
-                "Tags": f"{p.get('style', '')}, {p.get('frame_material', '')}, {p.get('colour', '')}",
+                "Tags": f"{p.get('style', '')}, {p.get('frame_material', '')}",
                 "Published": "TRUE",
                 "Option1 Name": "Title",
                 "Option1 Value": "Default Title",
@@ -320,24 +316,37 @@ with st.sidebar:
                 "Variant Price": p.get("price", 0),
                 "Variant Requires Shipping": "TRUE",
                 "Variant Taxable": "TRUE",
-                "Image Src": image_url,   # <--- MAPPED CORRECTLY
+                "Image Src": p.get("image_path", ""), # Main Image
                 "Image Position": 1,
                 "Image Alt Text": p.get("title", ""),
                 "Gift Card": "FALSE",
                 "Variant Weight Unit": "g",
                 "Status": "active"
             }
-            
+            # Fill blanks for master row
             full_row = {header: row.get(header, "") for header in template_headers}
             csv_data.append(full_row)
             
+            # --- 2. EXTRA ROWS (Additional Images) ---
+            # Loop through the list of extra URLs we saved in utils.py
+            extra_urls = p.get("variation_urls", [])
+            
+            for i, url in enumerate(extra_urls):
+                # Create an empty row with just Handle + Image Info
+                extra_row = {header: "" for header in template_headers}
+                extra_row["Handle"] = handle
+                extra_row["Image Src"] = url
+                extra_row["Image Position"] = i + 2 # Start at position 2
+                csv_data.append(extra_row)
+            
+        # Generate CSV
         df = pd.DataFrame(csv_data, columns=template_headers)
         csv_string = df.to_csv(index=False).encode('utf-8')
         
         st.download_button(
-            label="📥 Export to Shopify (Cloudinary Linked)",
+            label="📥 Export to Shopify (Multi-Image)",
             data=csv_string,
-            file_name="shopify_import_final.csv",
+            file_name="shopify_import_complete.csv",
             mime="text/csv",
             type="primary"
         )
